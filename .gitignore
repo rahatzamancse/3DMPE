@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# uv / virtual environment
+.venv/
+venv/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Project outputs and data (not version controlled)
+results/
+data/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/

@@ -1,0 +1,27 @@
+[project]
+name = "mpe3d"
+version = "0.1.0"
+description = "3D point-cloud reconstruction from multi-view distance matrices using Multi-Perspective Simultaneous Embedding (MPSE)."
+readme = "README.md"
+authors = [
+    { name = "Rahat Zaman", email = "rahatzamancse@gmail.com" }
+]
+requires-python = ">=3.11"
+dependencies = [
+    "matplotlib>=3.11.0",
+    "numpy>=2.4.6",
+    "plotly>=6.8.0",
+    "scipy>=1.17.1",
+    "tqdm>=4.68.3",
+    "trimesh>=4.12.2",
+]
+
+[build-system]
+requires = ["uv_build>=0.11.26,<0.12.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "ipywidgets>=8.1.8",
+    "jupyterlab>=4.6.1",
+]
