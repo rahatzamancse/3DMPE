@@ -33,12 +33,35 @@ def rotation_matrix(angle_deg, axis):
     raise ValueError(f"axis must be 'x', 'y' or 'z', got {axis!r}")
 
 
+def rotation_matrix_xyz(alpha_deg, beta_deg, gamma_deg):
+    """General 3-axis rotation matrix from the paper (Eq. 9).
+
+    ``alpha``, ``beta`` and ``gamma`` are the rotation angles (in degrees)
+    about the x, y and z axes, composed as ``Rz(alpha) @ Ry(beta) @ Rx(gamma)``::
+
+        R = | ca*cb   ca*sb*sg - sa*cg   ca*sb*cg + sa*sg |
+            | sa*cb   sa*sb*sg + ca*cg   sa*sb*cg - ca*sg |
+            | -sb     cb*sg              cb*cg            |
+    """
+    a, b, g = np.radians([alpha_deg, beta_deg, gamma_deg])
+    ca, sa = np.cos(a), np.sin(a)
+    cb, sb = np.cos(b), np.sin(b)
+    cg, sg = np.cos(g), np.sin(g)
+    return np.array([
+        [ca * cb, ca * sb * sg - sa * cg, ca * sb * cg + sa * sg],
+        [sa * cb, sa * sb * sg + ca * cg, sa * sb * cg - ca * sg],
+        [-sb, cb * sg, cb * cg],
+    ])
+
+
 def equiangle_perspectives(points, n):
     """Rotate ``points`` about the Y-axis into ``n`` equally spaced perspectives.
 
-    Returns ``(perspectives, projection_matrices)`` where each perspective is the
-    rotated ``(N, 3)`` point cloud and each projection matrix is the 3x3 rotation
-    that produced it.
+    Returns ``(perspectives, projection_matrices)`` where each perspective is
+    the rotated ``(N, 3)`` point cloud and each projection matrix ``P``
+    satisfies ``view = points @ P.T`` (i.e. ``P`` maps ground-truth coordinates
+    to that view's coordinates, as required for fixed-projection 3DMPE; the
+    paper records the *negated* rotation angles for the same reason).
     """
     if n == 1:
         return [points], [np.identity(3)]
@@ -54,19 +77,38 @@ def equiangle_perspectives(points, n):
         for signed_angle in (angle, -angle):
             rot = rotation_matrix(signed_angle, 'y')
             perspectives.append(np.dot(points, rot))
-            projection_mats.append(rot)
+            projection_mats.append(rot.T)
     return perspectives, projection_mats
 
 
-def randomized_perspectives(points, n, angle_range=(0, 360), rng=None):
-    """Rotate ``points`` about the Y-axis into ``n`` randomly jittered perspectives.
+def randomized_perspectives(points, n, angle_range=(0, 360), axes='y',
+                            rng=None):
+    """Rotate ``points`` into ``n`` randomly jittered perspectives.
 
-    The angular range is split into ``n`` bins and one random angle is drawn per
-    bin, so the perspectives are spread out but not perfectly regular.
+    The angular band ``theta_r = end - start`` is split into ``n`` bins; one
+    random angle is drawn per bin so the perspectives are spread out but not
+    perfectly regular, and half of the views use negated angles (paper,
+    Section 3 "Dataset"). The returned projection matrices map ground-truth
+    coordinates to view coordinates (``view = points @ P.T``), which is the
+    form fixed-projection 3DMPE expects.
+
+    Parameters
+    ----------
+    points : ndarray, shape ``(N, 3)``
+    n : int
+        Number of perspectives.
+    angle_range : tuple of float
+        ``(start, end)`` rotation band in degrees.
+    axes : str
+        ``'y'`` rotates about the Y axis only; ``'xyz'`` draws an independent
+        angle per axis and composes them with the general rotation matrix of
+        the paper's Eq. 9 (:func:`rotation_matrix_xyz`).
 
     Returns ``(perspectives, projection_matrices)``.
     """
     rng = np.random.default_rng() if rng is None else rng
+    if axes not in ('y', 'xyz'):
+        raise ValueError(f"axes must be 'y' or 'xyz', got {axes!r}")
     if n == 1:
         return [points.copy()], [np.identity(3)]
     perspectives, projection_mats = [], []
@@ -77,15 +119,19 @@ def randomized_perspectives(points, n, angle_range=(0, 360), rng=None):
 
     start, end = angle_range
     add_angle = (end - start) / n
+    n_angles = 3 if axes == 'xyz' else 1
     for i in range(1, n // 2 + 1):
         low = (i - 1) * add_angle + start
         high = i * add_angle + start
-        angle1 = rng.uniform() * (high - low) + low
-        angle2 = rng.uniform() * (high - low) + low
-        for signed_angle in (angle1, -angle2):
-            rot = rotation_matrix(signed_angle, 'y')
+        angles1 = rng.uniform(low, high, size=n_angles)
+        angles2 = rng.uniform(low, high, size=n_angles)
+        for signed_angles in (angles1, -angles2):
+            if axes == 'xyz':
+                rot = rotation_matrix_xyz(*signed_angles)
+            else:
+                rot = rotation_matrix(signed_angles[0], 'y')
             perspectives.append(np.dot(points, rot))
-            projection_mats.append(rot)
+            projection_mats.append(rot.T)
     return perspectives, projection_mats
 
 

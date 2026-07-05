@@ -1,10 +1,14 @@
 """Align a recovered embedding to the ground-truth point cloud.
 
-MPSE recovers a point cloud only up to a rigid transformation (and reflection),
-so before measuring reconstruction error the embedding must be aligned to the
-ground truth. Two strategies are provided: a random 4-point sampling search
-(:func:`four_point_sample_transform`) and a closed-form SVD alignment
-(:func:`svd_transform`).
+3DMPE recovers a point cloud only up to a rigid transformation (and
+reflection), so before measuring reconstruction error the embedding must be
+aligned to the ground truth. Two strategies from the paper
+("3DMPE: 3D Multi-Perspective Embedding", CCCG 2026) are provided:
+
+* :func:`four_point_sample_transform` -- RANSAC-style search over random
+  4-point correspondences (paper Eq. 6-7).
+* :func:`kabsch_transform` -- closed-form SVD alignment (paper Eq. 13-16),
+  used by the ROA metric.
 """
 
 import numpy as np
@@ -92,21 +96,35 @@ def four_point_sample_transform(points, gt_points, dist_agg_fn=None,
     return best_t, min_dist
 
 
-def svd_transform(X, Y, dist_agg_fn=None):
-    """Closed-form (orthogonal Procrustes) alignment of ``X`` onto ``Y``.
+def kabsch_transform(X, Y, allow_reflection=True):
+    """Closed-form rigid alignment of ``X`` onto ``Y`` via SVD (Kabsch).
 
-    Returns ``(transform, aggregated_distance)``.
+    Implements the paper's Eq. 13-16: both clouds are mean-centered, the
+    cross-covariance ``H = (X - mu_X)^T (Y - mu_Y)`` is decomposed with SVD
+    ``H = U S V^T``, the optimal rotation is ``R = V U^T`` and the translation
+    is ``t = mu_Y - R mu_X``.
+
+    Because 3DMPE reconstructions are only defined up to reflection, mirror
+    solutions are accepted by default; set ``allow_reflection=False`` to force
+    a proper rotation (``det(R) = +1``).
+
+    Returns the ``(4, 4)`` homogeneous transform mapping ``X`` onto ``Y``.
     """
-    if dist_agg_fn is None:
-        dist_agg_fn = np.mean
-    T = np.linalg.inv(X.T @ X) @ Y.T @ X
-    U, _, V = np.linalg.svd(T)
-    T = U @ V
+    X = np.asarray(X, dtype=float)
+    Y = np.asarray(Y, dtype=float)
 
-    T = to_homogeneous_transform(T)
-    aligned = apply_transformation(X, T)
-    offset = Y[0] - aligned[0]
-    for i in range(3):
-        T[i, 3] = offset[i]
+    mu_x = X.mean(axis=0)
+    mu_y = Y.mean(axis=0)
 
-    return T, dist_agg_fn(np.linalg.norm(apply_transformation(X, T) - Y, axis=1))
+    H = (X - mu_x).T @ (Y - mu_y)
+    U, _, Vt = np.linalg.svd(H)
+    R = Vt.T @ U.T
+    if not allow_reflection and np.linalg.det(R) < 0:
+        Vt[-1] *= -1
+        R = Vt.T @ U.T
+    t = mu_y - R @ mu_x
+
+    T = np.identity(4)
+    T[:3, :3] = R
+    T[:3, 3] = t
+    return T

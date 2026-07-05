@@ -16,7 +16,8 @@ import numpy as np
 
 from . import mview
 from .alignment import apply_transformation, four_point_sample_transform
-from .metrics import baseline_metrics, chamfer_distance, earth_movers_distance
+from .metrics import (baseline_metrics, chamfer_distance,
+                      earth_movers_distance, roa)
 from .noise import add_distance_noise, add_matching_noise
 from .views import (
     distance_weight_matrices,
@@ -39,6 +40,7 @@ class ReconstructionResult:
     transform: np.ndarray
     chamfer: float
     emd: float
+    roa: float
     alignment_error: float
     cost: float
     cost_history: np.ndarray
@@ -52,15 +54,18 @@ class ReconstructionResult:
         return {
             'chamfer': self.chamfer,
             'emd': self.emd,
+            'roa': self.roa,
             'final_cost': self.cost,
             'baseline_chamfer': self.baseline['chamfer'],
             'baseline_emd': self.baseline['emd'],
+            'baseline_roa': self.baseline['roa'],
         }
 
 
 def build_distance_matrices(points, n_perspectives=5, angle_range=(0, 360),
-                            projection='atleast', points_in_at_least=4,
-                            n_rays=None, noise_type='none', noise_amount=0.0,
+                            rotation_axes='y', projection='atleast',
+                            points_in_at_least=4, n_rays=None,
+                            noise_type='none', noise_amount=0.0,
                             noise_level=0.0, noise_dist='gaussian', rng=None):
     """Turn a 3D point cloud into per-view distance and weight matrices.
 
@@ -71,7 +76,7 @@ def build_distance_matrices(points, n_perspectives=5, angle_range=(0, 360),
     n_points = len(points)
 
     perspectives, projection_mats = randomized_perspectives(
-        points, n_perspectives, angle_range, rng=rng)
+        points, n_perspectives, angle_range, axes=rotation_axes, rng=rng)
 
     if noise_type == 'matching':
         perspectives = add_matching_noise(perspectives, noise_amount,
@@ -105,13 +110,13 @@ def build_distance_matrices(points, n_perspectives=5, angle_range=(0, 360),
 
 
 def reconstruct(points, n_perspectives=5, angle_range=(0, 360),
-                projection='atleast', points_in_at_least=4, n_rays=None,
-                variable_projection=True, initial_projections='cylinder',
-                noise_type='none', noise_amount=0.0, noise_level=0.0,
-                noise_dist='gaussian', batch_size=None, max_iter=200,
-                min_grad=1e-4, min_cost=1e-4, smart_initialize=True,
-                random_initial_embedding=False, verbose=0, rng=None,
-                compute_baseline=True):
+                rotation_axes='y', projection='atleast', points_in_at_least=4,
+                n_rays=None, variable_projection=True,
+                initial_projections='cylinder', noise_type='none',
+                noise_amount=0.0, noise_level=0.0, noise_dist='gaussian',
+                batch_size=None, max_iter=300, min_grad=1e-4, min_cost=1e-4,
+                smart_initialize=True, random_initial_embedding=False,
+                verbose=0, rng=None, compute_baseline=True):
     """Reconstruct a 3D point cloud from simulated multi-view distance matrices.
 
     Parameters
@@ -121,8 +126,12 @@ def reconstruct(points, n_perspectives=5, angle_range=(0, 360),
     n_perspectives : int
         Number of simulated camera views.
     angle_range : tuple of float
-        ``(start, end)`` Y-axis rotation range, in degrees, over which the views
-        are spread.
+        ``(start, end)`` rotation range, in degrees, over which the views are
+        spread. The paper (Figure 15) finds a band of at least ~90 degrees is
+        needed for a full reconstruction.
+    rotation_axes : str
+        ``'y'`` for single-axis viewpoints or ``'xyz'`` for the paper's
+        general 3-axis rotations (Eq. 9).
     projection : str
         Visibility model: ``'atleast'`` (each point visible in exactly
         ``points_in_at_least`` views) or ``'raytracing'`` (Z-buffer occlusion).
@@ -159,12 +168,14 @@ def reconstruct(points, n_perspectives=5, angle_range=(0, 360),
 
     dist_mats, weight_mats, projection_mats = build_distance_matrices(
         points, n_perspectives=n_perspectives, angle_range=angle_range,
-        projection=projection, points_in_at_least=points_in_at_least,
-        n_rays=n_rays, noise_type=noise_type, noise_amount=noise_amount,
+        rotation_axes=rotation_axes, projection=projection,
+        points_in_at_least=points_in_at_least, n_rays=n_rays,
+        noise_type=noise_type, noise_amount=noise_amount,
         noise_level=noise_level, noise_dist=noise_dist, rng=rng)
 
     baseline = (baseline_metrics(points, dist_mats, rng=rng)
-                if compute_baseline else {'chamfer': None, 'emd': None})
+                if compute_baseline
+                else {'chamfer': None, 'emd': None, 'roa': None})
 
     if variable_projection:
         projection_kwargs = dict(initial_projections=initial_projections,
@@ -203,6 +214,7 @@ def reconstruct(points, n_perspectives=5, angle_range=(0, 360),
         transform=transform,
         chamfer=chamfer_distance(aligned, points),
         emd=earth_movers_distance(aligned, points),
+        roa=roa(embedding, points),
         alignment_error=float(alignment_error),
         cost=float(mv.cost),
         cost_history=np.asarray(mv.computation_history[-1]['costs']),

@@ -25,13 +25,15 @@ Module map:
 * :mod:`mpe3d.noise` - inject distance/matching noise.
 * :mod:`mpe3d.mview` - vendored MPSE optimizer (the numerical core).
 * :mod:`mpe3d.alignment` - align a reconstruction to the ground truth.
-* :mod:`mpe3d.metrics` - Chamfer/EMD metrics and an MDS baseline.
-* :mod:`mpe3d.visualization` - interactive Plotly plots.
+* :mod:`mpe3d.metrics` - Chamfer/EMD/ROA metrics and an MDS baseline.
+* :mod:`mpe3d.visualization` - interactive Plotly plots and benchmark curves.
 * :mod:`mpe3d.pipeline` - the end-to-end :func:`reconstruct` helper.
+* :mod:`mpe3d.benchmark` - LMNet/ShapeNet parameter sweeps as tidy DataFrames.
 """
 
 from . import (  # noqa: F401
     alignment,
+    benchmark,
     datasets,
     metrics,
     mview,
@@ -52,4 +54,5 @@ __all__ = [
     "alignment",
     "metrics",
     "visualization",
+    "benchmark",
 ]

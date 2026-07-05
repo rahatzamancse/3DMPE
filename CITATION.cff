@@ -1,0 +1,25 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite the paper below."
+title: "3DMPE: 3D Multi-Perspective Embedding"
+authors:
+  - family-names: Huroyan
+    given-names: Vahan
+    affiliation: "Saint Louis University"
+  - family-names: Zaman
+    given-names: Md Rahat-uz-
+    affiliation: "University of Utah"
+  - family-names: Kobourov
+    given-names: Stephen
+    affiliation: "Technical University of Munich"
+preferred-citation:
+  type: conference-paper
+  title: "3DMPE: 3D Multi-Perspective Embedding"
+  authors:
+    - family-names: Huroyan
+      given-names: Vahan
+    - family-names: Zaman
+      given-names: Md Rahat-uz-
+    - family-names: Kobourov
+      given-names: Stephen
+  collection-title: "Proceedings of the 38th Canadian Conference on Computational Geometry (CCCG)"
+  year: 2026

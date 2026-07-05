@@ -51,6 +51,9 @@ def parse_args():
     views.add_argument("--n-perspectives", type=int, default=5)
     views.add_argument("--angle-start", type=float, default=0.0)
     views.add_argument("--angle-end", type=float, default=360.0)
+    views.add_argument("--rotation-axes", choices=["y", "xyz"], default="y",
+                       help="'y' for single-axis viewpoints, 'xyz' for the "
+                            "paper's general 3-axis rotations (Eq. 9).")
     views.add_argument("--projection", choices=["atleast", "raytracing"],
                        default="atleast")
     views.add_argument("--points-in-at-least", type=int, default=4,
@@ -62,9 +65,10 @@ def parse_args():
     noise.add_argument("--noise-type", choices=["none", "distance", "matching"],
                        default="none")
     noise.add_argument("--noise-amount", type=float, default=0.0,
-                       help="Fraction of points affected by noise.")
+                       help="Fraction q of points affected by noise.")
     noise.add_argument("--noise-level", type=float, default=0.0,
-                       help="Noise magnitude / neighbourhood size.")
+                       help="Noise amplitude p, relative to the point-cloud "
+                            "diameter (paper uses 0.05 and 0.1).")
     noise.add_argument("--noise-dist", choices=["gaussian", "uniform"],
                        default="gaussian")
 
@@ -74,7 +78,8 @@ def parse_args():
                            "of optimizing them.")
     mpse.add_argument("--initial-projections", default="cylinder")
     mpse.add_argument("--batch-size", type=int, default=None)
-    mpse.add_argument("--max-iter", type=int, default=200)
+    mpse.add_argument("--max-iter", type=int, default=300,
+                      help="Paper uses at most 300 minibatch SGD iterations.")
     mpse.add_argument("--min-grad", type=float, default=1e-4)
     mpse.add_argument("--min-cost", type=float, default=1e-4)
     mpse.add_argument("--no-smart-initialize", action="store_true")
@@ -119,6 +124,7 @@ def main():
         points,
         n_perspectives=args.n_perspectives,
         angle_range=(args.angle_start, args.angle_end),
+        rotation_axes=args.rotation_axes,
         projection=args.projection,
         points_in_at_least=args.points_in_at_least,
         n_rays=args.n_rays,
